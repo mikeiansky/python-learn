@@ -16,3 +16,8 @@ class Person():
     @classmethod
     def from_dict(cls, dict_obj):
         return cls(dict_obj['name'], dict_obj['age'])
+    
+
+person = Person('mike', 28)
+print(type(person))
+print(type(Person))
