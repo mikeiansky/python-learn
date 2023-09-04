@@ -24,6 +24,7 @@ def count(num):
             return result
         return wrap
     return count_decorate
+    
 
 @count(24)
 @log
