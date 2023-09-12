@@ -20,6 +20,7 @@ def consume(tag):
     while True:
         data = share_data.get()
         print(tag, 'get data [', data, ']')
+        share_data.task_done()
 
 
 
