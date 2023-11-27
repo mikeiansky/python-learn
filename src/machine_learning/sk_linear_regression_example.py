@@ -1,114 +1,61 @@
-# Author: Jake Vanderplas <jakevdp@cs.washington.edu>
-#
-# License: BSD 3 clause
-
 import matplotlib.pyplot as plt
-import numpy as np
 
-from sklearn.datasets import fetch_species_distributions
-from sklearn.neighbors import KernelDensity
+from sklearn import svm
+from sklearn.datasets import make_blobs
+from sklearn.inspection import DecisionBoundaryDisplay
 
-# if basemap is available, we'll use it.
-# otherwise, we'll improvise later...
-try:
-    from mpl_toolkits.basemap import Basemap
-
-    basemap = True
-except ImportError:
-    basemap = False
-
-
-def construct_grids(batch):
-    """Construct the map grid from the batch object
-
-    Parameters
-    ----------
-    batch : Batch object
-        The object returned by :func:`fetch_species_distributions`
-
-    Returns
-    -------
-    (xgrid, ygrid) : 1-D arrays
-        The grid corresponding to the values in batch.coverages
-    """
-    # x,y coordinates for corner cells
-    xmin = batch.x_left_lower_corner + batch.grid_size
-    xmax = xmin + (batch.Nx * batch.grid_size)
-    ymin = batch.y_left_lower_corner + batch.grid_size
-    ymax = ymin + (batch.Ny * batch.grid_size)
-
-    # x coordinates of the grid cells
-    xgrid = np.arange(xmin, xmax, batch.grid_size)
-    # y coordinates of the grid cells
-    ygrid = np.arange(ymin, ymax, batch.grid_size)
-
-    return (xgrid, ygrid)
-
-
-# Get matrices/arrays of species IDs and locations
-data = fetch_species_distributions()
-species_names = ["Bradypus Variegatus", "Microryzomys Minutus"]
-
-Xtrain = np.vstack([data["train"]["dd lat"], data["train"]["dd long"]]).T
-ytrain = np.array(
-    [d.decode("ascii").startswith("micro") for d in data["train"]["species"]],
-    dtype="int",
+# we create two clusters of random points
+n_samples_1 = 1000
+n_samples_2 = 100
+centers = [[0.0, 0.0], [2.0, 2.0]]
+clusters_std = [1.5, 0.5]
+X, y = make_blobs(
+    n_samples=[n_samples_1, n_samples_2],
+    centers=centers,
+    cluster_std=clusters_std,
+    random_state=0,
+    shuffle=False,
 )
-Xtrain *= np.pi / 180.0  # Convert lat/long to radians
 
-# Set up the data grid for the contour plot
-xgrid, ygrid = construct_grids(data)
-X, Y = np.meshgrid(xgrid[::5], ygrid[::5][::-1])
-land_reference = data.coverages[6][::5, ::5]
-land_mask = (land_reference > -9999).ravel()
+# fit the model and get the separating hyperplane
+clf = svm.SVC(kernel="linear", C=1.0)
+clf.fit(X, y)
 
-xy = np.vstack([Y.ravel(), X.ravel()]).T
-xy = xy[land_mask]
-xy *= np.pi / 180.0
+# fit the model and get the separating hyperplane using weighted classes
+wclf = svm.SVC(kernel="linear", class_weight={1: 10})
+wclf.fit(X, y)
 
-# Plot map of South America with distributions of each species
-fig = plt.figure()
-fig.subplots_adjust(left=0.05, right=0.95, wspace=0.05)
+# plot the samples
+plt.scatter(X[:, 0], X[:, 1], c=y, cmap=plt.cm.Paired, edgecolors="k")
 
-for i in range(2):
-    plt.subplot(1, 2, i + 1)
+# plot the decision functions for both classifiers
+ax = plt.gca()
+disp = DecisionBoundaryDisplay.from_estimator(
+    clf,
+    X,
+    plot_method="contour",
+    colors="k",
+    levels=[0],
+    alpha=0.5,
+    linestyles=["-"],
+    ax=ax,
+)
 
-    # construct a kernel density estimate of the distribution
-    print(" - computing KDE in spherical coordinates")
-    kde = KernelDensity(
-        bandwidth=0.04, metric="haversine", kernel="gaussian", algorithm="ball_tree"
-    )
-    kde.fit(Xtrain[ytrain == i])
+# plot decision boundary and margins for weighted classes
+wdisp = DecisionBoundaryDisplay.from_estimator(
+    wclf,
+    X,
+    plot_method="contour",
+    colors="r",
+    levels=[0],
+    alpha=0.5,
+    linestyles=["-"],
+    ax=ax,
+)
 
-    # evaluate only on the land: -9999 indicates ocean
-    Z = np.full(land_mask.shape[0], -9999, dtype="int")
-    Z[land_mask] = np.exp(kde.score_samples(xy))
-    Z = Z.reshape(X.shape)
-
-    # plot contours of the density
-    levels = np.linspace(0, Z.max(), 25)
-    plt.contourf(X, Y, Z, levels=levels, cmap=plt.cm.Reds)
-
-    if basemap:
-        print(" - plot coastlines using basemap")
-        m = Basemap(
-            projection="cyl",
-            llcrnrlat=Y.min(),
-            urcrnrlat=Y.max(),
-            llcrnrlon=X.min(),
-            urcrnrlon=X.max(),
-            resolution="c",
-        )
-        m.drawcoastlines()
-        m.drawcountries()
-    else:
-        print(" - plot coastlines from coverage")
-        plt.contour(
-            X, Y, land_reference, levels=[-9998], colors="k", linestyles="solid"
-        )
-        plt.xticks([])
-        plt.yticks([])
-
-    plt.title(species_names[i])
-
+plt.legend(
+    [disp.surface_.collections[0], wdisp.surface_.collections[0]],
+    ["non weighted", "weighted"],
+    loc="upper right",
+)
 plt.show()
