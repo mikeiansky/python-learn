@@ -8,6 +8,8 @@ print(age)
 age = 40
 print(id(age))
 print(age)
+print(id(40))
+print('----------')
 # age = 256
 # print(id(age))
 # print(age)
